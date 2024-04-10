@@ -1,4 +1,6 @@
 from rest_framework import viewsets
+from rest_framework.generics import ListAPIView
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -9,6 +11,18 @@ from .models import Project, ProjectMembership
 from .serializers import ProjectSerializer, ProjectMembershipSerializer
 # Make sure to import your custom permissions
 from .permissions import IsProjectOwner, IsProjectManager, IsMember, IsViewer
+
+
+class PublicProjectPagination(PageNumberPagination):
+    page_size = 10  # Set the number of items per page
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+
+class PublicProjectsListView(ListAPIView):
+    queryset = Project.objects.filter(is_public=True).order_by('id')
+    serializer_class = ProjectSerializer
+    pagination_class = PublicProjectPagination
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -22,12 +36,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
         that they own or are assigned to or are public.
         """
         user = self.request.user
-        # Get projects that are either owned by the user, assigned to the user, or public.
+        # Adjust the query to include only projects that are either private and owned/assigned to the user,
+        # or public but also owned/assigned to the user.
         return Project.objects.filter(
-            Q(owner=user) |  # User is the owner of the project
-            # User is assigned to the project
-            Q(projectmembership__user=user) |
-            Q(is_public=True)  # Project is public
+            Q(is_public=False, projectmembership__user=user) |
+            Q(owner=user) |
+            Q(is_public=True, projectmembership__user=user)
         ).distinct()
 
     def get_permissions(self):
